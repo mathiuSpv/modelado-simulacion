@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -14,8 +14,8 @@ from typing import List, Dict, Any, Tuple, Callable
 class NewtonRaphsonRequest(BaseModel):
     function: str
     x0: float
-    tolerance: float
-    max_iterations: int
+    tolerance: float = None
+    max_iterations: int = None
 
     @field_validator('x0')
     def validate_x0(cls, v: float):
@@ -51,7 +51,7 @@ class NewtonRaphsonCalculator:
             expr = sp.sympify(func_str)
             deriv_expr = sp.diff(expr, x)
             return (
-                sp.lambdify(x, expr, modules=['numpy']),
+                sp.lambdify(x, expr, modules=MODULES['numpy']),
                 str(expr),
                 sp.lambdify(x, deriv_expr, modules=['numpy']),
                 str(deriv_expr)
@@ -81,7 +81,7 @@ class NewtonRaphsonCalculator:
         [iteration, xn, f_xn, df_xn, xn1]"""
         result = self.execute()
         data = [row.model_dump() for row in result.result]
-        return pd.DataFrame(data)
+        return pd.DataFrame(data).to_string(index=False)
 
     def execute(self) -> NewtonRaphsonResponse:
         results = []

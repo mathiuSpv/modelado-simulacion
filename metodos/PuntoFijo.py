@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -8,36 +8,38 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, FieldValidationInfo
 from typing import List, Dict, Any, Callable
 
 class PuntoFijoRequest(BaseModel):
     function: str
     x0: float
-    tolerance: float
-    max_iterations: int
+    tolerance: float = None
+    max_iterations: int = None
 
     @field_validator('function')
-    def validate_function_convergence(cls, v: str, values: Any):
+    def validate_function_convergence(cls, v: str, info: FieldValidationInfo):
         """
         Verifica que |g'(x0)| < 1 (Condición de convergencia del método).
-        Matemáticamente, garantiza que la iteración converge localmente.
         """
+        if not hasattr(info, 'data') or 'x0' not in info.data:
+            return v
+            
         x = sp.symbols('x')
         try:
             expr = sp.sympify(v)
             g_prime = sp.diff(expr, x)
-            g_prime_x0 = g_prime.subs(x, values.data['x0'])
+            g_prime_x0 = g_prime.subs(x, info.data['x0'])
             
             if abs(float(g_prime_x0)) >= 1:
                 raise ValueError(
-                    f"|g'(x0)| = {abs(float(g_prime_x0)):.2f} ≥ 1\n"
-                    "El método no converge con esta función. Modifique g(x)."
+                    f"|g'({info.data['x0']})| = {abs(float(g_prime_x0)):.2f} ≥ 1\n"
+                    "Requisito: |g'(x0)| < 1 para convergencia"
                 )
         except sp.SympifyError:
             raise ValueError(f"Función inválida: {v}")
         return v
-
+    
     @field_validator('x0')
     def validate_x0(cls, v):
         """Verifica que x0 sea finito."""
@@ -71,21 +73,11 @@ class PuntoFijoCalculator:
 
     def _setup_function(self, func_str: str) -> tuple[Callable, str]:
         x = sp.symbols('x')
-        try:
-            expr = sp.sympify(func_str)
-            deriv = sp.diff(expr, x)
-            deriv_val = deriv.subs(x, self.x0)
-            if abs(float(deriv_val)) >= 1:
-                raise ValueError(
-                    f"|g'({self.x0})| = {abs(float(deriv_val)):.2f} ≥ 1\n"
-                    f"Sugerencia: Modifique la función g(x)"
-                )
-            return (
-                sp.lambdify(x, expr, modules=['numpy']),
-                str(expr)
-            )
-        except sp.SympifyError:
-            raise ValueError(f"Función inválida: {func_str}")
+        expr = sp.sympify(func_str)
+        return (
+            sp.lambdify(x, expr, modules=MODULES),
+            str(expr)
+        )
 
     def _generate_plot(self, iterations: List[int], values: List[float]) -> Dict[str, Any]:
         fig = go.Figure()
@@ -107,7 +99,7 @@ class PuntoFijoCalculator:
         [iteration, xn, g_xn]"""
         result = self.execute()
         data = [row.model_dump() for row in result.result]
-        return pd.DataFrame(data)
+        return pd.DataFrame(data).to_string(index=False)
 
     def execute(self) -> PuntoFijoResponse:
         results = []

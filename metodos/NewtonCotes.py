@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -66,7 +66,7 @@ class NewtonCotesCalculator:
         try:
             expr = sp.sympify(func_str)
             return (
-                sp.lambdify(x, expr, modules=['numpy']),
+                sp.lambdify(x, expr, modules=MODULES),
                 str(expr)
             )
         except sp.SympifyError:
@@ -99,7 +99,7 @@ class NewtonCotesCalculator:
         """Devuelve el resultado de integración como DataFrame con una fila:
         [method, result, real_result, error]"""
         result = self.execute()
-        return pd.DataFrame([result.model_dump(exclude={'function', 'plot_data'})])
+        return pd.DataFrame([result.model_dump(exclude={'function', 'plot_data'})]).to_string(index=False)
 
     def execute(self) -> NewtonCotesResponse:
         method_map = {

@@ -67,7 +67,7 @@ class LagrangeCalculator:
             'polinomio': self._interpolar(),
             'x_puntos': self.x_puntos,
             'y_puntos': self.y_puntos
-        })
+        }).to_string(index=False)
 
     def execute(self) -> LagrangeResponse:
         polinomio = self._interpolar()

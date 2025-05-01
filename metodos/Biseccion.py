@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -12,11 +12,11 @@ from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any
 
 class BiseccionRequest(BaseModel):
-    funcion: str
+    function: str
     a: float
     b: float
-    tolerance: float
-    max_iterations: int
+    tolerance: float = None
+    max_iterations: int = None
 
     @field_validator('b')
     def validate_interval_and_sign(cls, v: float, values: Any):
@@ -29,8 +29,8 @@ class BiseccionRequest(BaseModel):
         
         try:
             x = sp.symbols('x')
-            expr = sp.sympify(values.data['funcion'])
-            func = sp.lambdify(x, expr, modules=['numpy'])
+            expr = sp.sympify(values.data['function'])
+            func = sp.lambdify(x, expr, modules=MODULES)
             a, b = values.data['a'], v
             fa = func(a)
             fb = func(b)
@@ -64,16 +64,16 @@ class BiseccionCalculator:
         self.b = request.b
         self.tol = request.tolerance or TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
-        self.funcion = self._parse_function(request.funcion)
+        self.function = self._parse_function(request.function)
 
     def _parse_function(self, func_str: str) -> callable:
         x = sp.symbols('x')
         expr = sp.sympify(func_str)
-        return sp.lambdify(x, expr, modules=['numpy', 'math'])
+        return sp.lambdify(x, expr, modules=MODULES)
 
     def _generate_plot(self, raiz: float) -> Dict[str, Any]:
         x_vals = np.linspace(self.a - 1, self.b + 1, 400)
-        y_vals = [self.funcion(xi) for xi in x_vals]
+        y_vals = [self.function(xi) for xi in x_vals]
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -94,7 +94,7 @@ class BiseccionCalculator:
         [iteracion, a, b, c, f_c]"""
         result = self.execute()
         data = [row.model_dump() for row in result.resultado]
-        return pd.DataFrame(data)
+        return pd.DataFrame(data).to_string(index=False)
 
     def execute(self) -> BiseccionResponse:
         resultados = []
@@ -102,7 +102,7 @@ class BiseccionCalculator:
         
         for i in range(self.max_iter):
             c = (a + b) / 2
-            f_c = self.funcion(c)
+            f_c = self.function(c)
             
             resultados.append(BiseccionRowResponse(
                 iteracion=i,
@@ -115,7 +115,7 @@ class BiseccionCalculator:
             if abs(f_c) < self.tol or (b - a)/2 < self.tol:
                 break
                 
-            if self.funcion(a) * f_c < 0:
+            if self.function(a) * f_c < 0:
                 b = c
             else:
                 a = c

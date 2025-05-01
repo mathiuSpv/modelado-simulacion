@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -15,25 +15,18 @@ class BusquedaBinariaRequest(BaseModel):
     function: str
     a: float
     b: float
-    tolerance: float
-    max_iterations: int
+    tolerance: float = None
+    max_iterations: int = None
 
     @field_validator('b')
     def validate_interval(cls, v: float, value: Any):
         """Valida que a < b"""
         if 'a' not in value.data:
             return v
-            
-        if v <= value.data['a']:
+        a = value.data['a']
+        if v <= a:
             raise ValueError("b debe ser mayor que a")
         return v
-
-    @field_validator('tolerance')
-    def validate_tolerance(cls, v: float):
-        """Valida que la tolerancia sea positiva"""
-        if v <= 0:
-            raise ValueError("La tolerancia debe ser positiva")
-        return abs(v)
     
 class BusquedaBinariaRowResponse(BaseModel):
     iteration: int
@@ -61,7 +54,7 @@ class BusquedaBinariaCalculator:
         try:
             expr = sp.sympify(func_str)
             return (
-                sp.lambdify(x, expr, modules=['numpy']),
+                sp.lambdify(x, expr, modules=MODULES),
                 str(expr)
             )
         except sp.SympifyError:
@@ -87,8 +80,8 @@ class BusquedaBinariaCalculator:
         """Devuelve los resultados como DataFrame con columnas:
         [iteration, a, b, midpoint, f_midpoint]"""
         result = self.execute()
-        data = [row.model_dump() for row in result.iterations]  # Cambio aquí
-        return pd.DataFrame(data)
+        data = [row.model_dump() for row in result.iterations]
+        return pd.DataFrame(data).to_string(index=False)
 
     def execute(self) -> BusquedaBinariaResponse:
         iterations = []

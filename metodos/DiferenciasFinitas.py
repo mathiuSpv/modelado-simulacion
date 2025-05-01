@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp
+    from . import pd, np, go, sp, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -10,7 +10,7 @@ from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Tuple, Callable
 
 class DiferenciasFinitasRequest(BaseModel):
-    funcion: str
+    function
     x: float
     h: float
 
@@ -31,21 +31,21 @@ class DiferenciasFinitasRequest(BaseModel):
 class DerivadaResponse(BaseModel):
     primera_derivada: float
     segunda_derivada: float
-    funcion: str
+    function
     plot_data: Dict[str, Any]
 
 class DiferenciasFinitasCalculator:
     def __init__(self, request: DiferenciasFinitasRequest):
         self.x = request.x
         self.h = abs(request.h)
-        self.function, self.function_repr = self._setup_function(request.funcion)
+        self.function, self.function_repr = self._setup_function(request.function)
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
         try:
             expr = sp.sympify(func_str)
             return (
-                sp.lambdify(x, expr, modules=['numpy', 'math']),
+                sp.lambdify(x, expr, modules=MODULES),
                 str(expr)
             )
         except sp.SympifyError:
@@ -84,14 +84,14 @@ class DiferenciasFinitasCalculator:
         """Devuelve las derivadas como DataFrame con una sola fila:
         [primera_derivada, segunda_derivada]"""
         result = self.execute()
-        return pd.DataFrame([result.model_dump(exclude={'funcion', 'plot_data'})])
+        return pd.DataFrame([result.model_dump(exclude={'function', 'plot_data'})]).to_string(index=False)
 
     def execute(self) -> DerivadaResponse:
         primera, segunda = self._calcular_derivadas()
         return DerivadaResponse(
             primera_derivada=primera,
             segunda_derivada=segunda,
-            funcion=self.function_repr,
+            function=self.function_repr,
             plot_data=self._generate_plot()
         )
 

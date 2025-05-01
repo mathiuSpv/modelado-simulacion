@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp
+    from . import pd, np, go, sp, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -10,7 +10,7 @@ from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Tuple, Callable
 
 class MontecarloRequest(BaseModel):
-    funcion: str
+    function
     a: float
     b: float
     n: int
@@ -33,7 +33,7 @@ class MontecarloRequest(BaseModel):
 class MontecarloResponse(BaseModel):
     media: float
     desviacion_estandar: float
-    funcion: str
+    function
     plot_data: Dict[str, Any]
 
 class MontecarloCalculator:
@@ -42,14 +42,14 @@ class MontecarloCalculator:
         self.b = request.b
         self.n = max(1, request.n)
         self.seed = np.random.seed(request.seed)
-        self.function, self.function_repr = self._setup_function(request.funcion)
+        self.function, self.function_repr = self._setup_function(request.function)
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
         try:
             expr = sp.sympify(func_str)
             return (
-                sp.lambdify(x, expr, modules=['numpy']),
+                sp.lambdify(x, expr, modules=MODULES),
                 str(expr)
             )
         except sp.SympifyError:
@@ -76,7 +76,7 @@ class MontecarloCalculator:
         """Devuelve los resultados estadísticos como DataFrame con una fila:
         [media, desviacion_estandar]"""
         result = self.execute()
-        return pd.DataFrame([result.model_dump(exclude={'funcion', 'plot_data'})])
+        return pd.DataFrame([result.model_dump(exclude={'function', 'plot_data'})]).to_string(index=False)
 
     def execute(self) -> MontecarloResponse:
         if self.seed is not None:
@@ -91,7 +91,7 @@ class MontecarloCalculator:
         return MontecarloResponse(
             media=media,
             desviacion_estandar=desviacion,
-            funcion=self.function_repr,
+            function=self.function_repr,
             plot_data=self._generate_plot(x_aleatorios, y_eval)
         )
 

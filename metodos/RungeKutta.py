@@ -1,12 +1,11 @@
 try:
-    from ..metodos import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from ..metodos import pd, np, go, sp, TOLERANCIA, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
     import plotly.graph_objects as go
     import sympy as sp
     TOLERANCIA = 1e-9
-    MAX_ITER = 100
 
 from enum import Enum
 from pydantic import BaseModel, field_validator
@@ -67,7 +66,7 @@ class ODECalculator:
         try:
             expr = sp.sympify(func_str)
             return (
-                sp.lambdify((t, y), expr, modules=['numpy']),
+                sp.lambdify((t, y), expr, modules=MODULES),
                 str(expr)
             )
         except sp.SympifyError:
@@ -125,7 +124,7 @@ class ODECalculator:
         [t, euler, heun, rk4, exact]"""
         result = self.execute()
         data = [row.model_dump() for row in result.result]
-        return pd.DataFrame(data)
+        return pd.DataFrame(data).to_string(index=False)
 
     def execute(self) -> ODEResponse:
         methods = {
