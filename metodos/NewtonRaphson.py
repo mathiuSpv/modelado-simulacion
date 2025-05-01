@@ -51,9 +51,9 @@ class NewtonRaphsonCalculator:
             expr = sp.sympify(func_str)
             deriv_expr = sp.diff(expr, x)
             return (
-                sp.lambdify(x, expr, modules=MODULES['numpy']),
+                sp.lambdify(x, expr, modules=MODULES),
                 str(expr),
-                sp.lambdify(x, deriv_expr, modules=['numpy']),
+                sp.lambdify(x, deriv_expr, modules=MODULES),
                 str(deriv_expr)
             )
         except sp.SympifyError:
@@ -100,12 +100,12 @@ class NewtonRaphsonCalculator:
                 xn1=xn1
             ))
             
-            if abs(xn1 - current_x) < self.tolerance:
+            if abs(xn1 - current_x) < abs(self.tolerance):
                 break
                 
             current_x = xn1
         else:
-            raise RuntimeError(f"No convergencia en {self.max_iter} iteraciones. Último error: {abs(xn1 - current_x):.3e}")
+            raise RuntimeError(f"No convergencia en {self.max_iter} iteraciones. Último error: {abs(xn1 - current_x)}")
 
         return NewtonRaphsonResponse(
             result=results,

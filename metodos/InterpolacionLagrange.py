@@ -62,9 +62,11 @@ class LagrangeCalculator:
     
     def toDataFrame(self) -> pd.DataFrame:
         """Devuelve los puntos de interpolación como DataFrame:
-        [x_puntos, y_puntos]"""
+        [polinomio, x_puntos, y_puntos]"""
+        polinomio_repetido = [str(self._interpolar())] * len(self.x_puntos)
+        
         return pd.DataFrame({
-            'polinomio': self._interpolar(),
+            'polinomio': polinomio_repetido,
             'x_puntos': self.x_puntos,
             'y_puntos': self.y_puntos
         }).to_string(index=False)

@@ -14,7 +14,7 @@ MODULES = [
         'sin': np.sin,
         'cos': np.cos,
         'log': np.log,
-        'e': np.e
+        'e': np.e,
     },
     'numpy',
     'math'

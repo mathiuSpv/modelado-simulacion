@@ -10,7 +10,7 @@ from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Tuple, Callable
 
 class DiferenciasFinitasRequest(BaseModel):
-    function
+    function: str
     x: float
     h: float
 

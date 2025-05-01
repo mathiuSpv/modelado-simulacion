@@ -53,7 +53,7 @@ class AitkenRowResponse(BaseModel):
     xn0: float
     xn1: float
     xn2: float
-    xnAitken: float
+    xnA: float
 
 class AitkenResponse(BaseModel):
     result: List[AitkenRowResponse]
@@ -93,7 +93,7 @@ class AitkenCalculator:
     
     def toDataFrame(self) -> pd.DataFrame:
         """Devuelve los resultados como DataFrame con columnas:
-        [iteration, xn0, xn1, xn2, xnAitken]"""
+        [iteration, xn0, xn1, xn2, xnA]"""
         result = self.execute()
         data = [row.model_dump() for row in result.result]
         return pd.DataFrame(data).to_string(index=False)
@@ -117,7 +117,7 @@ class AitkenCalculator:
                 xn0=current_x,
                 xn1=xn1,
                 xn2=xn2,
-                xnAitken=aitken
+                xnA=aitken
             ))
             
             if abs(aitken - current_x) < self.tolerance:
@@ -135,7 +135,7 @@ class AitkenCalculator:
             function=self.function_repr,
             plot_data=self._generate_plot(
                 iterations=[r.iteration for r in results],
-                values=[r.xnAitken for r in results]
+                values=[r.xnA for r in results]
             )
         )
 

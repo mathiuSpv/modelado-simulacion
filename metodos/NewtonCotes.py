@@ -1,12 +1,10 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER, MODULES
+    from . import pd, np, go, sp, MODULES
 except ImportError:
     import pandas as pd
     import numpy as np
     import plotly.graph_objects as go
     import sympy as sp
-    TOLERANCIA = 1e-9
-    MAX_ITER = 100
 
 from enum import Enum
 from pydantic import BaseModel, field_validator
@@ -83,6 +81,38 @@ class NewtonCotesCalculator:
     def _simpson_simple(self) -> float:
         h = (self.b - self.a) / 2
         return (self.function(self.a) + 4*self.function(self.a + h) + self.function(self.b)) * h/3
+    
+    def _simpson_compound(self) -> float:
+        if self.n % 2 != 0:
+            raise ValueError("Para Simpson compuesto, num_intervals debe ser par")
+        
+        h = (self.b - self.a) / self.n
+        x = np.linspace(self.a, self.b, self.n+1)
+        y = self.function(x)
+        return h/3 * (y[0] + y[-1] + 4*np.sum(y[1:-1:2]) + 2*np.sum(y[2:-1:2]))
+    
+    def _trapezoid_compound(self) -> float:
+        h = (self.b - self.a) / self.n
+        x = np.linspace(self.a, self.b, self.n+1)
+        y = self.function(x)
+        return h * (np.sum(y) - (y[0] + y[-1])/2)
+
+    def _simpson_38_simple(self) -> float:
+        h = (self.b - self.a) / 3
+        x0, x1, x2, x3 = self.a, self.a+h, self.a+2*h, self.b
+        return 3*h/8 * (self.function(x0) + 3*self.function(x1) + 3*self.function(x2) + self.function(x3))
+
+    def _simpson_38_compound(self) -> float:
+        if self.n % 3 != 0:
+            raise ValueError("Para Simpson 3/8 compuesto, num_intervals debe ser múltiplo de 3")
+        
+        h = (self.b - self.a) / self.n
+        x = np.linspace(self.a, self.b, self.n+1)
+        y = self.function(x)
+        
+        sum_3h = 3 * np.sum(y[1:-1:3] + y[2:-1:3])
+        sum_2h = 2 * np.sum(y[3:-1:3])
+        return 3*h/8 * (y[0] + y[-1] + sum_3h + sum_2h)
 
     def _generate_plot(self, x_vals: np.ndarray, y_vals: np.ndarray) -> Dict[str, Any]:
         fig = go.Figure()
@@ -105,7 +135,11 @@ class NewtonCotesCalculator:
         method_map = {
             IntegrationMethod.HALF_RECTANGLE: self._half_rectangle,
             IntegrationMethod.SIMPLE_TRAPEZOID: self._trapezoid_simple,
-            IntegrationMethod.SIMPSON_SIMPLE: self._simpson_simple
+            IntegrationMethod.COMPOUND_TRAPEZOID: self._trapezoid_compound,
+            IntegrationMethod.SIMPSON_SIMPLE: self._simpson_simple,
+            IntegrationMethod.SIMPSON_COMPOUND: self._simpson_compound,
+            IntegrationMethod.SIMPSON_3_8_SIMPLE: self._simpson_38_simple,
+            IntegrationMethod.SIMPSON_3_8_COMPOUND: self._simpson_38_compound
         }
         
         try:
