@@ -24,6 +24,28 @@ class AitkenRequest(BaseModel):
             raise ValueError("x0 debe ser un número finito")
         return v
     
+    @field_validator('function')
+    def validate_function_convergence(cls, v: str, values: Any):
+        """
+        Verifica que |g'(x0)| < 1 (Condición de convergencia del método).
+        Matemáticamente, garantiza que la iteración converge localmente.
+        """
+        x = sp.symbols('x')
+        try:
+            expr = sp.sympify(v)
+            g_prime = sp.diff(expr, x)
+            g_prime_x0 = g_prime.subs(x, values.data['x0'])
+            
+            if abs(float(g_prime_x0)) >= 1:
+                raise ValueError(
+                    f"|g'(x0)| = {abs(float(g_prime_x0)):.2f} ≥ 1\n"
+                    "El método no converge con esta función. Modifique g(x)."
+                )
+        except sp.SympifyError:
+            raise ValueError(f"Función inválida: {v}")
+        return v
+
+    
 class AitkenRowResponse(BaseModel):
     iteration: int
     xn0: float
