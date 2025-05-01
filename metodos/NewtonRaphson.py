@@ -8,7 +8,7 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Tuple, Callable
 
 class NewtonRaphsonRequest(BaseModel):
@@ -17,6 +17,13 @@ class NewtonRaphsonRequest(BaseModel):
     tolerance: float
     max_iterations: int
 
+    @field_validator('x0')
+    def validate_x0(cls, v: float):
+        """El punto inicial debe ser finito para garantizar convergencia"""
+        if not np.isfinite(v):
+            raise ValueError("x0 debe ser un número finito")
+        return v
+    
 class NewtonRaphsonRowResponse(BaseModel):
     iteration: int
     xn: float
@@ -37,15 +44,6 @@ class NewtonRaphsonCalculator:
         self.tolerance = abs(request.tolerance) if request.tolerance else TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
         self.function, self.function_repr, self.derivative, self.derivative_repr = self._setup_functions(request.function)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida que x0 sea finito y la derivada no sea cero en x0."""
-        if not np.isfinite(self.x0):
-            raise ValueError(f"x0 debe ser finito. Se recibió: {self.x0}")
-        df_x0 = self.derivative(self.x0)
-        if abs(df_x0) < 1e-12:
-            raise ValueError(f"Derivada cercana a cero en x0: {df_x0}")
 
     def _setup_functions(self, func_str: str) -> Tuple[Callable, str, Callable, str]:
         x = sp.symbols('x')
@@ -77,6 +75,13 @@ class NewtonRaphsonCalculator:
             hovermode='x unified'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados como DataFrame con columnas:
+        [iteration, xn, f_xn, df_xn, xn1]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.result]
+        return pd.DataFrame(data)
 
     def execute(self) -> NewtonRaphsonResponse:
         results = []

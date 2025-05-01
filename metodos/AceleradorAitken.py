@@ -8,7 +8,7 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Tuple, Callable
 
 class AitkenRequest(BaseModel):
@@ -17,6 +17,13 @@ class AitkenRequest(BaseModel):
     tolerance: float
     max_iterations: int
 
+    @field_validator('x0')
+    def validate_x0(cls, v: float):
+        """Verifica que x0 sea finito y esté cerca de una raíz."""
+        if not np.isfinite(v):
+            raise ValueError("x0 debe ser un número finito")
+        return v
+    
 class AitkenRowResponse(BaseModel):
     iteration: int
     xn0: float
@@ -35,13 +42,6 @@ class AitkenCalculator:
         self.tolerance = abs(request.tolerance) if request.tolerance else TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
         self.function, self.function_repr = self._setup_function(request.function)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        if not isinstance(self.x0, (int, float)):
-            raise ValueError(f"x0 debe ser numérico. Se recibió: {type(self.x0)}")
-        if self.tolerance <= 0:
-            raise ValueError(f"Tolerancia debe ser positiva. Se recibió: {self.tolerance}")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
@@ -72,6 +72,13 @@ class AitkenCalculator:
             yaxis_title='Valor'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados como DataFrame con columnas:
+        [iteration, xn0, xn1, xn2, xnAitken]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.result]
+        return pd.DataFrame(data)
 
     def execute(self) -> AitkenResponse:
         results = []

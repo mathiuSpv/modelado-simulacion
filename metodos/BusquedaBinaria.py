@@ -8,7 +8,7 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Tuple, Callable
 
 class BusquedaBinariaRequest(BaseModel):
@@ -18,6 +18,23 @@ class BusquedaBinariaRequest(BaseModel):
     tolerance: float
     max_iterations: int
 
+    @field_validator('b')
+    def validate_interval(cls, v: float, value: Any):
+        """Valida que a < b"""
+        if 'a' not in value.data:
+            return v
+            
+        if v <= value.data['a']:
+            raise ValueError("b debe ser mayor que a")
+        return v
+
+    @field_validator('tolerance')
+    def validate_tolerance(cls, v: float):
+        """Valida que la tolerancia sea positiva"""
+        if v <= 0:
+            raise ValueError("La tolerancia debe ser positiva")
+        return abs(v)
+    
 class BusquedaBinariaRowResponse(BaseModel):
     iteration: int
     a: float
@@ -38,16 +55,6 @@ class BusquedaBinariaCalculator:
         self.tolerance = abs(request.tolerance) if request.tolerance else TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
         self.function, self.function_repr = self._setup_function(request.function)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida que a < b y f(a)*f(b) < 0."""
-        if self.a >= self.b:
-            raise ValueError(f"Intervalo inválido: a ({self.a}) >= b ({self.b})")
-        fa = self.function(self.a)
-        fb = self.function(self.b)
-        if fa * fb >= 0:
-            raise ValueError(f"f(a)*f(b) >= 0. No hay cambio de signo en [{self.a}, {self.b}]")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
@@ -75,6 +82,13 @@ class BusquedaBinariaCalculator:
             yaxis_title='Punto Medio'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados como DataFrame con columnas:
+        [iteration, a, b, midpoint, f_midpoint]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.iterations]  # Cambio aquí
+        return pd.DataFrame(data)
 
     def execute(self) -> BusquedaBinariaResponse:
         iterations = []
@@ -109,3 +123,9 @@ class BusquedaBinariaCalculator:
 
     def __str__(self):
         return str(self.execute())
+
+if __name__ == "__main__":
+    import __config__
+    from metodos.test.pdf1BusquedaBinaria import testCases
+    
+    testCases()

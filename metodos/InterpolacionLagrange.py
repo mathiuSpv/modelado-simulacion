@@ -6,12 +6,21 @@ except ImportError:
     import plotly.graph_objects as go
     import sympy as sp
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any
 
 class LagrangeRequest(BaseModel):
     x_puntos: List[float]
     y_puntos: List[float]
+
+    @field_validator('y_puntos')
+    def validate_puntos(cls, v: List[float], values: Any):
+        """Los puntos x deben ser distintos y coincidir en cantidad con y"""
+        if 'x_puntos' in values.data and len(values.data['x_puntos']) != len(v):
+            raise ValueError("x_puntos y y_puntos deben tener la misma longitud")
+        if 'x_puntos' in values.data and len(values.data['x_puntos']) != len(set(values.data['x_puntos'])):
+            raise ValueError("Los valores x_puntos deben ser únicos")
+        return v
 
 class LagrangeResponse(BaseModel):
     polinomio: str
@@ -21,11 +30,6 @@ class LagrangeCalculator:
     def __init__(self, request: LagrangeRequest):
         self.x_puntos = np.array(request.x_puntos)
         self.y_puntos = np.array(request.y_puntos)
-        self._validar_puntos()
-
-    def _validar_puntos(self):
-        if len(self.x_puntos) != len(self.y_puntos):
-            raise ValueError("x_puntos y y_puntos deben tener la misma longitud")
 
     def _interpolar(self) -> np.poly1d:
         n = len(self.x_puntos)
@@ -55,6 +59,15 @@ class LagrangeCalculator:
             yaxis_title='P(x)'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los puntos de interpolación como DataFrame:
+        [x_puntos, y_puntos]"""
+        return pd.DataFrame({
+            'polinomio': self._interpolar(),
+            'x_puntos': self.x_puntos,
+            'y_puntos': self.y_puntos
+        })
 
     def execute(self) -> LagrangeResponse:
         polinomio = self._interpolar()

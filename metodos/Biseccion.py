@@ -8,7 +8,7 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any
 
 class BiseccionRequest(BaseModel):
@@ -17,6 +17,34 @@ class BiseccionRequest(BaseModel):
     b: float
     tolerance: float
     max_iterations: int
+
+    @field_validator('b')
+    def validate_interval_and_sign(cls, v: float, values: Any):
+        """Valida que a < b y que f(a)*f(b) < 0"""
+        if 'a' not in values.data:
+            return v
+            
+        if v <= values.data['a']:
+            raise ValueError("b debe ser mayor que a")
+        
+        try:
+            x = sp.symbols('x')
+            expr = sp.sympify(values.data['funcion'])
+            func = sp.lambdify(x, expr, modules=['numpy'])
+            a, b = values.data['a'], v
+            fa = func(a)
+            fb = func(b)
+            
+            if fa * fb >= 0:
+                raise ValueError(
+                    f"Funcion: {expr}\n"
+                    f"No hay cambio de signo en [a, b]. f({a})={fa:.3f}, f({b})={fb:.3f}\n"
+                    f"Requisito: f(a)*f(b) < 0"
+                )
+        except sp.SympifyError:
+            raise ValueError("Función inválida: no se puede parsear para validación")
+            
+        return v
 
 class BiseccionRowResponse(BaseModel):
     iteracion: int
@@ -37,16 +65,11 @@ class BiseccionCalculator:
         self.tol = request.tolerance or TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
         self.funcion = self._parse_function(request.funcion)
-        self._validar_intervalo()
 
     def _parse_function(self, func_str: str) -> callable:
         x = sp.symbols('x')
         expr = sp.sympify(func_str)
         return sp.lambdify(x, expr, modules=['numpy', 'math'])
-
-    def _validar_intervalo(self):
-        if self.funcion(self.a) * self.funcion(self.b) >= 0:
-            raise ValueError("f(a) y f(b) deben tener signos opuestos")
 
     def _generate_plot(self, raiz: float) -> Dict[str, Any]:
         x_vals = np.linspace(self.a - 1, self.b + 1, 400)
@@ -65,6 +88,13 @@ class BiseccionCalculator:
             yaxis_title='f(x)'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados como DataFrame con columnas: 
+        [iteracion, a, b, c, f_c]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.resultado]
+        return pd.DataFrame(data)
 
     def execute(self) -> BiseccionResponse:
         resultados = []
@@ -98,3 +128,9 @@ class BiseccionCalculator:
 
     def __str__(self):
         return str(self.execute())
+    
+if __name__ == "__main__":
+    import __config__
+    from metodos.test.pdf1Biseccion import testCases
+    
+    testCases()

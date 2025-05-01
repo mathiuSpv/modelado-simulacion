@@ -6,7 +6,7 @@ except ImportError:
     import plotly.graph_objects as go
     import sympy as sp
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Tuple, Callable
 
 class MontecarloRequest(BaseModel):
@@ -15,6 +15,20 @@ class MontecarloRequest(BaseModel):
     b: float
     n: int
     seed: int = 0
+
+    @field_validator('b')
+    def validate_interval(cls, v: float, values: Any):
+        """El intervalo [a,b] debe ser válido (a < b)"""
+        if 'a' in values.data and v <= values.data['a']:
+            raise ValueError("b debe ser mayor que a")
+        return v
+
+    @field_validator('n')
+    def validate_samples(cls, v: float):
+        """El número de muestras debe ser positivo"""
+        if v <= 0:
+            raise ValueError("n debe ser positivo")
+        return v
 
 class MontecarloResponse(BaseModel):
     media: float
@@ -29,14 +43,6 @@ class MontecarloCalculator:
         self.n = max(1, request.n)
         self.seed = np.random.seed(request.seed)
         self.function, self.function_repr = self._setup_function(request.funcion)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida que a < b y n sea positivo."""
-        if self.a >= self.b:
-            raise ValueError(f"Intervalo inválido: a ({self.a}) debe ser menor que b ({self.b})")
-        if self.n <= 0:
-            raise ValueError(f"n debe ser positivo. Se recibió: {self.n}")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
@@ -65,6 +71,12 @@ class MontecarloCalculator:
             bargap=0.05
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados estadísticos como DataFrame con una fila:
+        [media, desviacion_estandar]"""
+        result = self.execute()
+        return pd.DataFrame([result.model_dump(exclude={'funcion', 'plot_data'})])
 
     def execute(self) -> MontecarloResponse:
         if self.seed is not None:

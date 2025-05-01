@@ -1,5 +1,5 @@
 try:
-    from . import pd, np, go, sp, TOLERANCIA, MAX_ITER
+    from ..metodos import pd, np, go, sp, TOLERANCIA, MAX_ITER
 except ImportError:
     import pandas as pd
     import numpy as np
@@ -9,7 +9,7 @@ except ImportError:
     MAX_ITER = 100
 
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Tuple, Callable, Optional
 
 class ODEMethod(Enum):
@@ -24,6 +24,20 @@ class ODERequest(BaseModel):
     tf: float
     h: float
     exact_solution: Optional[str] = None
+
+    @field_validator('tf')
+    def validate_time_interval(cls, v, values):
+        """El intervalo temporal debe ser válido (t0 < tf)"""
+        if 't0' in values.data and v <= values.data['t0']:
+            raise ValueError("tf debe ser mayor que t0")
+        return v
+
+    @field_validator('h')
+    def validate_step_size(cls, v):
+        """El paso h debe ser positivo para la integración numérica"""
+        if v <= 0:
+            raise ValueError("h debe ser positivo")
+        return abs(v)
 
 class ODEResponsePoint(BaseModel):
     t: float
@@ -47,16 +61,6 @@ class ODECalculator:
         self.h = abs(request.h) if request.h else TOLERANCIA
         self.function, self.function_repr = self._setup_function(request.equation)
         self.exact_solution = request.exact_solution
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida parámetros iniciales y función."""
-        if not np.isfinite(self.y0):
-            raise ValueError(f"y0 debe ser finito. Se recibió: {self.y0}")
-        if self.t0 >= self.tf:
-            raise ValueError(f"t0 ({self.t0}) debe ser menor que tf ({self.tf})")
-        if self.h <= 0:
-            raise ValueError(f"Paso h debe ser positivo. Se recibió: {self.h}")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         t, y = sp.symbols('t y')
@@ -115,6 +119,13 @@ class ODECalculator:
             yaxis_title='y(t)'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados numéricos como DataFrame con columnas:
+        [t, euler, heun, rk4, exact]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.result]
+        return pd.DataFrame(data)
 
     def execute(self) -> ODEResponse:
         methods = {

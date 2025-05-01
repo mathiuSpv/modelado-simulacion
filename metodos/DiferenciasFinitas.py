@@ -6,13 +6,27 @@ except ImportError:
     import plotly.graph_objects as go
     import sympy as sp
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Dict, Any, Tuple, Callable
 
 class DiferenciasFinitasRequest(BaseModel):
     funcion: str
     x: float
     h: float
+
+    @field_validator('x')
+    def validate_x(cls, v: float):
+        """El punto de evaluación debe ser finito"""
+        if not np.isfinite(v):
+            raise ValueError("x debe ser un número finito")
+        return v
+
+    @field_validator('h')
+    def validate_h(cls, v):
+        """El paso h debe ser positivo para aproximación numérica estable"""
+        if v <= 0:
+            raise ValueError("h debe ser positivo")
+        return abs(v)
 
 class DerivadaResponse(BaseModel):
     primera_derivada: float
@@ -25,14 +39,6 @@ class DiferenciasFinitasCalculator:
         self.x = request.x
         self.h = abs(request.h)
         self.function, self.function_repr = self._setup_function(request.funcion)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida que x sea finito y h > 0."""
-        if not np.isfinite(self.x):
-            raise ValueError(f"x debe ser finito. Se recibió: {self.x}")
-        if self.h <= 0:
-            raise ValueError(f"h debe ser positivo. Se recibió: {self.h}")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
@@ -73,6 +79,12 @@ class DiferenciasFinitasCalculator:
             hovermode='x unified'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve las derivadas como DataFrame con una sola fila:
+        [primera_derivada, segunda_derivada]"""
+        result = self.execute()
+        return pd.DataFrame([result.model_dump(exclude={'funcion', 'plot_data'})])
 
     def execute(self) -> DerivadaResponse:
         primera, segunda = self._calcular_derivadas()

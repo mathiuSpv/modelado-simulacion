@@ -9,7 +9,7 @@ except ImportError:
     MAX_ITER = 100
 
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any, Tuple, Callable
 
 class IntegrationMethod(Enum):
@@ -31,6 +31,20 @@ class NewtonCotesRequest(BaseModel):
     num_intervals: int
     method: IntegrationMethod
 
+    @field_validator('upper_bound')
+    def validate_bounds(cls, v: float, values: Any):
+        """El intervalo [a,b] debe ser válido (a < b)"""
+        if 'lower_bound' in values.data and v <= values.data['lower_bound']:
+            raise ValueError("upper_bound debe ser mayor que lower_bound")
+        return v
+
+    @field_validator('num_intervals')
+    def validate_intervals(cls, v: int, values: Any):
+        """Para métodos compuestos, n debe ser > 1"""
+        if 'method' in values.data and v <= 1 and values.data['method'].name.endswith('COMPOUND'):
+            raise ValueError("num_intervals debe ser > 1 para métodos compuestos")
+        return max(1, v)
+
 class NewtonCotesResponse(BaseModel):
     result: float
     method: str
@@ -46,14 +60,6 @@ class NewtonCotesCalculator:
         self.n = max(1, request.num_intervals)
         self.method = request.method
         self.function, self.function_repr = self._setup_function(request.function)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida límites del intervalo y método seleccionado."""
-        if self.a >= self.b:
-            raise ValueError(f"Intervalo inválido: a ({self.a}) >= b ({self.b})")
-        if self.method in [IntegrationMethod.SIMPSON_COMPOUND, IntegrationMethod.SIMPSON_3_8_COMPOUND] and self.n <= 1:
-            raise ValueError(f"Método {self.method} requiere n > 1")
 
     def _setup_function(self, func_str: str) -> Tuple[Callable, str]:
         x = sp.symbols('x')
@@ -88,6 +94,12 @@ class NewtonCotesCalculator:
             xaxis_title='x',
             yaxis_title='f(x)')
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve el resultado de integración como DataFrame con una fila:
+        [method, result, real_result, error]"""
+        result = self.execute()
+        return pd.DataFrame([result.model_dump(exclude={'function', 'plot_data'})])
 
     def execute(self) -> NewtonCotesResponse:
         method_map = {

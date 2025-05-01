@@ -8,7 +8,7 @@ except ImportError:
     TOLERANCIA = 1e-9
     MAX_ITER = 100
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Dict, Any, Callable
 
 class PuntoFijoRequest(BaseModel):
@@ -16,6 +16,41 @@ class PuntoFijoRequest(BaseModel):
     x0: float
     tolerance: float
     max_iterations: int
+
+    @field_validator('function')
+    def validate_function_convergence(cls, v: str, values: Any):
+        """
+        Verifica que |g'(x0)| < 1 (Condición de convergencia del método).
+        Matemáticamente, garantiza que la iteración converge localmente.
+        """
+        x = sp.symbols('x')
+        try:
+            expr = sp.sympify(v)
+            g_prime = sp.diff(expr, x)
+            g_prime_x0 = g_prime.subs(x, values.data['x0'])
+            
+            if abs(float(g_prime_x0)) >= 1:
+                raise ValueError(
+                    f"|g'(x0)| = {abs(float(g_prime_x0)):.2f} ≥ 1\n"
+                    "El método no converge con esta función. Modifique g(x)."
+                )
+        except sp.SympifyError:
+            raise ValueError(f"Función inválida: {v}")
+        return v
+
+    @field_validator('x0')
+    def validate_x0(cls, v):
+        """Verifica que x0 sea finito."""
+        if not np.isfinite(v):
+            raise ValueError("x0 debe ser un número finito")
+        return v
+
+    @field_validator('tolerance')
+    def validate_tolerance(cls, v):
+        """La tolerancia debe ser positiva."""
+        if v <= 0:
+            raise ValueError("La tolerancia debe ser > 0")
+        return abs(v)
 
 class PuntoFijoRowResponse(BaseModel):
     iteration: int
@@ -33,14 +68,6 @@ class PuntoFijoCalculator:
         self.tolerance = abs(request.tolerance) if request.tolerance else TOLERANCIA
         self.max_iter = max(1, request.max_iterations or MAX_ITER)
         self.function, self.function_repr = self._setup_function(request.function)
-        self._validate_inputs()
-
-    def _validate_inputs(self):
-        """Valida que x0 sea finito y tolerance positivo."""
-        if not np.isfinite(self.x0):
-            raise ValueError(f"x0 debe ser finito. Se recibió: {self.x0}")
-        if self.tolerance <= 0:
-            raise ValueError(f"Tolerancia debe ser > 0. Se recibió: {self.tolerance}")
 
     def _setup_function(self, func_str: str) -> tuple[Callable, str]:
         x = sp.symbols('x')
@@ -74,6 +101,13 @@ class PuntoFijoCalculator:
             yaxis_title='Valor de x'
         )
         return fig.to_dict()
+    
+    def toDataFrame(self) -> pd.DataFrame:
+        """Devuelve los resultados como DataFrame con columnas:
+        [iteration, xn, g_xn]"""
+        result = self.execute()
+        data = [row.model_dump() for row in result.result]
+        return pd.DataFrame(data)
 
     def execute(self) -> PuntoFijoResponse:
         results = []
